@@ -1,55 +1,84 @@
-import torch, torch.nn.functional as F
 import numpy as np
 import data
 
 
-class fcann2:
-    def __init__(self, input_dim, hidden_dim, output_dim):
-        self.W1 = np.random.randn(input_dim, hidden_dim)
-        self.b1 = np.zeros(hidden_dim)
-        self.W2 = np.random.randn(hidden_dim,output_dim)
-        self.b2 = np.zeros(output_dim)
+def fcann2_train(X,Y_,hidden, param_niter,param_delta,param_lambda):
+    num_classes = len(np.unique(Y_))
 
-        self.num_classes = output_dim
+    Y = data.class_to_onehot(Y_)
 
-    def train(self,X,Y_,param_niter=1e5,param_delta=0.05,param_lambda=1e-3):
-        
-        Y = data.class_to_onehot(Y_)
+    W1 = np.random.randn(X.shape[1], hidden)
+    b1 = np.zeros((1,hidden)) # or just hidden
 
-        for i in range(param_niter):
-            x = np.maximum(0,X @ self.W1 + self.b1)
+    W2 = np.random.randn(hidden, num_classes)
+    b2 = np.zeros((1,num_classes))
 
-            scores = x @ self.W2 + self.b2
-            exp_scores = np.exp(scores)
-            cum_scores = np.sum(exp_scores,axis=1,keepdims=True)
+    for i in range(param_niter):
+        scores_1 = np.dot(X,W1) + b1
+        scores_1_relu = np.maximum(0,scores_1)
+        scores_2 = np.dot(scores_1_relu,W2) + b2
 
-            probs = exp_scores / cum_scores
-            # reds = np.argmax(probs,axis=1)
+        probs = np.exp(scores_2) / np.sum(np.exp(scores_2), axis=1, keepdims=True)
+        logprobs = -np.log(probs + 1e-8)
 
-            dscores = probs - Y
-            dW2 = x.T @ dscores / X.shape[0] + param_lambda * self.W2
-            db2 = np.mean(dscores, axis=0)
+        loss = -np.mean(Y*logprobs)
 
-            dW1 = X.T @ (((probs-Y) @ self.W2.T) * (x>0)) / X.shape[0] + param_lambda * self.W1
-            db1 = np.mean(((probs-Y) @ self.W2.T) * (x>0), axis=0)
+        if i % 100 == 0:
+            print(f"Iter {i}; loss {loss:.4f}")
 
-            loss = -np.mean(np.sum(Y * np.log(probs + 1e-9),axis=1))
+        grad_scores_2 = probs - Y
 
-            if i % 100 == 0:
-                print(f"Iteration {i}: loss {loss}")
+        grad_W2 = np.dot(scores_1_relu.T, grad_scores_2) / X.shape[0] + param_lambda * W2
+        grad_b2 = np.sum(grad_scores_2, axis=0, keepdims=True) / X.shape[0]
 
-            
-            self.W2 -= param_delta*dW2
-            self.b2 -= param_delta*db2
-            self.W1 -= param_delta*dW1
-            self.b1 -= param_delta*db1
+        grad_scores_1_relu = np.dot(grad_scores_2, W2.T)
+        grad_scores_1 = grad_scores_1_relu * (scores_1 > 0) 
 
-    def fcann2_classify(Y_,Y):
-        
+        grad_W1 = np.dot(X.T, grad_scores_1) / X.shape[0] + param_lambda * W1
+        grad_b1 = np.sum(grad_scores_1, axis=0, keepdims=True) / X.shape[0]
 
-if __name__ == "__main__":
+        W2 -= param_delta * grad_W2
+        b2 -= param_delta * grad_b2
+
+        W1 -= param_delta * grad_W1
+        b1 -= param_delta * grad_b1
+
+
+    return W1,b1,W2,b2
+
+
+
+def fcann2_classify(X,W1,b1,W2,b2):
+    scores_1 = np.dot(X,W1) + b1
+    relu = np.maximum(0, scores_1)
+    scores_2 = np.dot(relu, W2) + b2
+    probs = np.exp(scores_2) / np.sum(np.exp(scores_2), axis=1, keepdims=True)
+
+    return probs
+
+def fcann2_decfun(W1,b1,W2,b2):
+    def classify(X):
+        return np.argmax(fcann2_classify(X,W1,b1,W2,b2), axis=1)
+    return classify
+
+
+if __name__ == '__main__':
     np.random.seed(100)
+    K = 6
+    C = 2
+    N = 10
+    X,Y_ = data.sample_gmm_2d(K,C,N)
 
-    X,Y_ = data.sample_gmm_2d(6,2,10)
-    model = fcann2(input_dim=X.shape[1], hidden_dim = 5, output_dim = np.nunique(Y_))
+    param_niter = int(1e5)
+    param_delta = 0.05
+    param_lambda = 1e-3
+    hidden_layer = 5
 
+    W1,b1,W2,b2 = fcann2_train(X,Y_,hidden_layer, param_niter, param_delta, param_lambda)
+    Y = np.argmax(fcann2_classify(X,W1,b1,W2,b2), axis=1)
+
+    func = fcann2_decfun(W1,b1,W2,b2)
+    bbox = (np.min(X, axis=0), np.max(X, axis=0))
+    data.graph_surface(func,bbox,offset=0.5)
+    data.graph_data(X,Y_,Y)
+    data.plt.show()

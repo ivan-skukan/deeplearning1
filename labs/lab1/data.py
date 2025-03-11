@@ -1,4 +1,6 @@
 import numpy as np
+import matplotlib
+matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import random
 
@@ -121,7 +123,7 @@ def eval_perf_binary(Y, Y_):
 
 def eval_perf_multi(Y, Y_):
   pr = []
-  n = max(Y_)+1
+  n = np.max(Y_)+1 # problematicno
   M = np.bincount(n * Y_ + Y, minlength=n*n).reshape(n, n)
   for i in range(n):
     tp_i = M[i,i]
@@ -181,7 +183,7 @@ def sample_gauss_2d(nclasses, nsamples):
   Y_= np.hstack([[Y]*nsamples for Y in Ys])
   
   return X,Y_
-
+# efektivna razlika?
 def sample_gmm_2d(ncomponents, nclasses, nsamples):
   # create the distributions and groundtruth labels
   Gs=[]

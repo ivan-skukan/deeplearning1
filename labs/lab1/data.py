@@ -130,8 +130,8 @@ def eval_perf_multi(Y, Y_):
     fn_i = np.sum(M[i,:]) - tp_i
     fp_i = np.sum(M[:,i]) - tp_i
     tn_i = np.sum(M) - fp_i - fn_i - tp_i
-    recall_i = tp_i / (tp_i + fn_i)
-    precision_i = tp_i / (tp_i + fp_i)
+    recall_i = tp_i / (tp_i + fn_i) if (tp_i + fn_i) > 0 else 0.0
+    precision_i = tp_i / (tp_i + fp_i) if (tp_i + fp_i) > 0 else 0.0
     pr.append( (recall_i, precision_i) )
   
   accuracy = np.trace(M)/np.sum(M)

@@ -199,7 +199,9 @@ class FC(Layer):
     Returns:
       An ndarray of shape (N, num_outputs)
     """
-    
+    self.inputs = inputs
+    outputs = np.dot(inputs, self.weights.T) + self.bias
+    return outputs
 
   def backward_inputs(self, grads):
     """
@@ -208,8 +210,7 @@ class FC(Layer):
     Returns:
       An ndarray of shape (N, num_inputs)
     """
-    # TODO
-    pass
+    return grads @ self.weights
 
   def backward_params(self, grads):
     """
@@ -218,9 +219,8 @@ class FC(Layer):
     Returns:
       List of params and gradient pairs.
     """
-    # TODO
-    grad_weights = ...
-    grad_bias = ...
+    grad_weights = grads.T @ self.inputs
+    grad_bias = sum(grads)
     return [[self.weights, grad_weights], [self.bias, grad_bias], self.name]
 
 
@@ -238,8 +238,8 @@ class ReLU(Layer):
     Returns:
       ndarray of shape (N, C, H, W).
     """
-    # TODO
-    pass
+    self.inputs = inputs
+    return np.maximum(0,inputs)
 
   def backward_inputs(self, grads):
     """
@@ -248,8 +248,8 @@ class ReLU(Layer):
     Returns:
       ndarray of shape (N, C, H, W).
     """
-    # TODO
-    pass
+    grad_relu = np.where(self.inputs > 0, 1, 0)
+    return grads * grad_relu
 
 
 class SoftmaxCrossEntropyWithLogits():
@@ -267,8 +267,12 @@ class SoftmaxCrossEntropyWithLogits():
       because then learning rate and weight decay won't depend on batch size.
 
     """
-    # TODO
-    pass
+    exp_stab = np.exp(x - np.max(x, axis=1, keepdims=True))
+    probs = exp_stab / np.sum(exp_stab, keepdims=True, axis=1)
+    logprobs = np.log(probs)
+    loss = -np.sum(y * logprobs, axis=1)
+
+    return np.mean(loss)
 
   def backward_inputs(self, x, y):
     """
@@ -279,8 +283,11 @@ class SoftmaxCrossEntropyWithLogits():
       Gradient with respect to the x, ndarray of shape (N, num_classes).
     """
     # Hint: don't forget that we took the average in the forward pass
-    # TODO
-    pass
+    exp_stab = np.exp(x - np.max(x, axis=1, keepdims=True))
+    probs = exp_stab / np.sum(exp_stab, keepdims=True, axis=1)
+    gradient = (probs - y) / x.shape[0]
+
+    return gradient
 
 
 class L2Regularizer():
@@ -301,8 +308,7 @@ class L2Regularizer():
      Returns:
       Scalar, loss due to the L2 regularization.
     """
-    # TODO
-    pass
+    return (np.sum(self.weights**2)) * self.weight_decay / 2
 
   def backward_params(self):
     """
@@ -310,7 +316,7 @@ class L2Regularizer():
       Gradient of the L2 loss with respect to the regularized weights.
     """
     # TODO
-    grad_weights = ...
+    grad_weights = self.weight_decay * self.weights
     return [[self.weights, grad_weights], self.name]
 
 

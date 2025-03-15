@@ -8,7 +8,7 @@ class PTDeep(nn.Module):
     def __init__(self, layers, activation=torch.relu):
         super(PTDeep, self).__init__()
 
-        self.weights = nn.ParameterList([nn.Parameter(torch.randn(layers[i-1],layers[i])) for i in range(1,len(layers))])
+        self.weights = nn.ParameterList([nn.Parameter(torch.randn(layers[i-1],layers[i]) / torch.sqrt(torch.tensor(layers[i-1], dtype=torch.float32))) for i in range(1,len(layers))])
         self.biases = nn.ParameterList([nn.Parameter(torch.zeros(layers[i])) for i in range(1,len(layers))])
         self.activation = activation
 
@@ -20,49 +20,45 @@ class PTDeep(nn.Module):
         x = torch.mm(x, self.weights[-1]) + self.biases[-1]
         return x
 
-    def get_loss(self, X, Yoh_, param_lambda = 1e-4):
+    def get_loss(self, X, Yoh_):
         
         vals = self.forward(X)
-        probs = torch.softmax(vals, dim=1)
-        logprobs = torch.log(probs + 1e-8)
+        logprobs = torch.nn.functional.log_softmax(vals,dim=1)
 
-        loss = -torch.sum(Yoh_ * logprobs, dim=1).mean()
-        reg = sum(torch.sum(W**2) for W in self.weights)
-        loss += (param_lambda / 2) * reg
+        loss = -torch.sum(Yoh_ * logprobs, dim=1)
 
-        return loss
+        return loss.mean()
 
-def train(model, X, Yoh_, param_niter, param_delta,param_lambda=1e-4):
+def train(model, X, Yoh_, param_niter, param_delta,param_lambda=1e-4, track_losses=False):
   """Arguments:
      - X: model inputs [NxD], type: torch.Tensor
      - Yoh_: ground truth [NxC], type: torch.Tensor
      - param_niter: number of training iterations
      - param_delta: learning rate
   """
-  
-  # inicijalizacija optimizatora
-  # ...
+  if track_losses:
+    losses = []
 
-  # petlja učenja
-  # ispisujte gubitak tijekom učenja
-  # ...
-
-  optimizer = optim.SGD(model.parameters(),lr=param_delta)
+  optimizer = optim.SGD(model.parameters(),lr=param_delta, weight_decay=param_lambda)
 
   for i in range(param_niter):
     #probs = model(X) 
-
-    loss = model.get_loss(X,Yoh_,param_lambda=param_lambda)
+    optimizer.zero_grad()
+    loss = model.get_loss(X,Yoh_)
+    if track_losses:
+      losses.append(loss)
 
     loss.backward()
 
     optimizer.step()
 
-    if i % 50 == 0:
+    if i % 100 == 0:
         print(f"Iter {i}; Loss {loss.item()}")
 
-    optimizer.zero_grad()
+    
 
+  if track_losses:
+    return losses
 
 def eval(model, X):
   """Arguments:
@@ -87,33 +83,58 @@ if __name__ == "__main__":
   # inicijaliziraj generatore slučajnih brojeva
   np.random.seed(100)
 
-  # instanciraj podatke X i labele Yoh_
-  X, Y_ = sample_gmm_2d(6,2,10)
-  # X, Y_ = sample_gauss_2d(3,100)
+  X, Y_ = sample_gauss_2d(3,100)
   X = torch.tensor(X, dtype=torch.float32)
   Yoh_ = class_to_onehot(Y_)
   Yoh_ = torch.tensor(Yoh_, dtype=torch.float32)
 
-  # definiraj model:
-  layers = [2,10,10,2]
-  ptlr = PTDeep(layers, torch.relu)
-  print('Model params:', count_params(ptlr))
-  # nauči parametre (X i Yoh_ moraju biti tipa torch.Tensor):
-  train(ptlr, X, Yoh_, 10000, 0.1)
+  pd = PTDeep([2,3])
 
-  # dohvati vjerojatnosti na skupu za učenje
-  Y = eval(ptlr, X)
-  # Y = np.argmax(probs, axis=1)
-  # print(Y)
-  # ispiši performansu (preciznost i odziv po razredima)
-  acc, rp, confmat = eval_perf_multi(Y_, Y)
+  train(pd, X, Yoh_, param_niter=10000, param_delta=0.1)
+  Y = eval(pd, X)
 
-  for i, (recall, precision) in enumerate(rp):
-    print(f"Class {i} - Recall: {recall:.4f}, Precision: {precision:.4f}")
-
-  # iscrtaj rezultate, decizijsku plohu
   rect = (np.min(X.numpy(), axis=0), np.max(X.numpy(), axis=0))
 
-  graph_surface(lambda X: eval(ptlr, torch.tensor(X, dtype=torch.float32)), rect, offset=0.5)
+  graph_surface(lambda X: eval(pd, torch.tensor(X, dtype=torch.float32)), rect, offset=0.5)
   graph_data(X.numpy(), Y_, Y, special=[])
   plt.show()
+
+
+  models_layers = [[2,2],[2,10,2],[2,10,10,2]]
+  data_info = [(4,2,40),(6,2,10)]
+
+  for K,C,N in data_info:
+    for model_specs in models_layers:
+      print(f'Data: {K,C,N}')
+      print(f'Model: {model_specs}')
+    # instanciraj podatke X i labele Yoh_
+      X, Y_ = sample_gmm_2d(K,C,N)
+      # X, Y_ = sample_gauss_2d(3,100)
+      X = torch.tensor(X, dtype=torch.float32)
+      Yoh_ = class_to_onehot(Y_)
+      Yoh_ = torch.tensor(Yoh_, dtype=torch.float32)
+
+      # definiraj model:
+      #layers = [2,10,10,2]
+      ptlr = PTDeep(model_specs, torch.relu)
+      print('Model params:', count_params(ptlr))
+      # nauči parametre (X i Yoh_ moraju biti tipa torch.Tensor):
+      train(ptlr, X, Yoh_, 10000, 0.1)
+
+      # dohvati vjerojatnosti na skupu za učenje
+      Y = eval(ptlr, X)
+      # Y = np.argmax(probs, axis=1)
+      # print(Y)
+      # ispiši performansu (preciznost i odziv po razredima)
+      #print(Y.shape)
+      acc, rp, confmat = eval_perf_multi(Y_, Y)
+
+      for i, (recall, precision) in enumerate(rp):
+        print(f"Class {i} - Recall: {recall:.4f}, Precision: {precision:.4f}")
+
+      # iscrtaj rezultate, decizijsku plohu
+      rect = (np.min(X.numpy(), axis=0), np.max(X.numpy(), axis=0))
+
+      graph_surface(lambda X: eval(ptlr, torch.tensor(X, dtype=torch.float32)), rect, offset=0.5)
+      graph_data(X.numpy(), Y_, Y, special=[])
+      plt.show()

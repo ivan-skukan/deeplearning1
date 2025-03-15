@@ -1,0 +1,6 @@
+averaging grads
+why do dims of conv have to fit batch size
+jos treba s lambda -2 i -1
+Budući da svaka težina odgovara jednom pikselu slike, u vašem pregledniku isključite automatsko glađenje slike. Preporuka je da na Linuxu koristite preglednik Geeqie.???
+what is reset_parameters
+dataloader u trecem smijemo?

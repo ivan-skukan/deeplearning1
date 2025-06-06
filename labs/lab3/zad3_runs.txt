@@ -1,0 +1,29 @@
+run1:
+validation Loss: 0.6681, Accuracy: 0.7847, F1 Score: 0.7503 (last epoch)
+Test Loss: 0.7789, Test Accuracy: 0.7821, Test F1 Score: 0.7418
+
+run2:
+Validation Loss: 0.4609, Accuracy: 0.8292, F1 Score: 0.8367
+Test Loss: 0.5720, Test Accuracy: 0.7982, Test F1 Score: 0.8005
+
+run3:
+Validation Loss: 0.4647, Accuracy: 0.8144, F1 Score: 0.8194
+Test Loss: 0.5554, Test Accuracy: 0.7959, Test F1 Score: 0.7959
+
+run4:
+Validation Loss: 0.6293, Accuracy: 0.7639, F1 Score: 0.7846
+Test Loss: 0.7335, Test Accuracy: 0.7351, Test F1 Score: 0.7561
+
+run5:
+Validation Loss: 0.8678, Accuracy: 0.7655, F1 Score: 0.7299
+Test Loss: 0.8810, Test Accuracy: 0.7638, Test F1 Score: 0.7193
+
+
+RNN:
+Validation Loss: 0.7523, Accuracy: 0.6590, F1 Score: 0.5755
+Test Loss: 0.7309, Test Accuracy: 0.6778, Test F1 Score: 0.6014
+
+LSTM:
+Validation Loss: 0.7178, Accuracy: 0.7825, F1 Score: 0.7568
+Test Loss: 0.7816, Test Accuracy: 0.7856, Test F1 Score: 0.7575
+

@@ -7,7 +7,7 @@ from zad2 import evaluate
 
 
 class RNNSentimentClassifier(nn.Module):
-  def __init__(self, vocab_size, embedding_dim, hidden_dim, output_dim=1, n_layers=2, pad_idx=0, embedding_matrix=None, rnn_type='gru'):
+  def __init__(self, vocab_size, embedding_dim, hidden_dim, output_dim=1, n_layers=2, pad_idx=0, embedding_matrix=None, rnn_type='gru', use_attention=False):
     super().__init__()
 
     self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=pad_idx)
@@ -17,20 +17,25 @@ class RNNSentimentClassifier(nn.Module):
       self.embedding.weight.requires_grad = False  
 
     if rnn_type == 'gru':
-      self.rnn = nn.GRU(embedding_dim, hidden_dim, num_layers=n_layers, batch_first=True, bidirectional=False)
+      self.rnn = nn.GRU(embedding_dim, hidden_dim, num_layers=n_layers, batch_first=False, bidirectional=False)
     elif rnn_type == 'lstm':
-      self.rnn = nn.LSTM(embedding_dim, hidden_dim, num_layers=n_layers, batch_first=True, bidirectional=False)
+      self.rnn = nn.LSTM(embedding_dim, hidden_dim, num_layers=n_layers, batch_first=False, bidirectional=False)
     elif rnn_type == 'rnn':
-      self.rnn = nn.RNN(embedding_dim, hidden_dim, num_layers=n_layers, batch_first=True, bidirectional=False)
+      self.rnn = nn.RNN(embedding_dim, hidden_dim, num_layers=n_layers, batch_first=False, bidirectional=False)
     
+    self.use_attention = use_attention
+
+    if use_attention:
+      self.attention = nn.Linear(hidden_dim, hidden_dim//2)
+      self.v = nn.Linear(hidden_dim//2, 1, bias=False)
+
     self.fc1 = nn.Linear(hidden_dim, hidden_dim)
     self.relu = nn.ReLU()
     self.fc2 = nn.Linear(hidden_dim, output_dim)
 
   def forward(self, text, lengths):
-    # text: [batch_size, seq_len]
-    embedded = self.embedding(text)  # [batch_size, seq_len, emb_dim]
-    embedded = embedded.permute(1, 0, 2)  # -> [seq_len, batch_size, emb_dim]
+    embedded = self.embedding(text)
+    embedded = embedded.permute(1, 0, 2)  #  [seq_len, batch_size, emb_dim]
 
     packed = nn.utils.rnn.pack_padded_sequence(embedded, lengths.cpu(), enforce_sorted=False)
     packed_output, hidden = self.rnn(packed)
@@ -38,34 +43,52 @@ class RNNSentimentClassifier(nn.Module):
     if isinstance(hidden, tuple):
       hidden = hidden[0]
 
-    out = hidden[-1]  # [batch, hidden_dim] (posljednji sloj)
+    if self.use_attention:
+      out, _ = nn.utils.rnn.pad_packed_sequence(packed_output)
+      output = out.permute(1, 0, 2)  
+
+      e = torch.tanh(self.attention(output))
+      scores = self.v(e).squeeze(2)  
+      a = F.softmax(scores, dim=1)  
+      context = torch.bmm(a.unsqueeze(1), output)
+      out = context.squeeze(1)  
+    else:
+      out = hidden[-1]  
 
     out = self.fc1(out)
     out = self.relu(out)
     out = self.fc2(out)
-    return out.squeeze(1)  # [batch]
+    return out.squeeze(1)  
 
 def train_model(model, train_loader, val_loader, test_loader, criterion, optimizer, num_epochs=10):
-    for epoch in range(num_epochs):
-        model.train()
-        total_loss = 0.0
-        for texts, labels, lengths in train_loader:
-            optimizer.zero_grad()
-            outputs = model(texts, lengths)
-            loss = criterion(outputs, labels.float())
-            loss.backward()
-            optimizer.step()
-            total_loss += loss.item()
+  for epoch in range(num_epochs):
+    model.train()
+    total_loss = 0.0
+    correct = 0
+    total = 0
+    for texts, labels, lengths in train_loader:
+      optimizer.zero_grad()
+      outputs = model(texts, lengths)
+      loss = criterion(outputs, labels.float())
+      loss.backward()
+      optimizer.step()
+      total_loss += loss.item()
 
-        avg_loss = total_loss / len(train_loader)
-        print(f'Epoch {epoch + 1}/{num_epochs}, Loss: {avg_loss:.4f}')
+      preds = torch.round(torch.sigmoid(outputs))
+      correct += (preds == labels).sum().item()
+      total += labels.size(0)
 
-        loss, acc, f1, confmat = evaluate(model, val_loader, criterion)
+    avg_loss = total_loss / len(train_loader)
+    accuracy = correct / total
+    print(f'Train: Epoch {epoch + 1}/{num_epochs}, Loss: {avg_loss:.4f}, Accuracy: {accuracy:.4f}')
 
-        print(f'Validation Loss: {loss:.4f}, Accuracy: {acc:.4f}, F1 Score: {f1:.4f}')
+    loss, acc, f1, confmat = evaluate(model, val_loader, criterion)
 
-    loss, acc, f1, confmat = evaluate(model, test_loader, criterion)
-    print(f'Test Loss: {loss:.4f}, Test Accuracy: {acc:.4f}, Test F1 Score: {f1:.4f}')
+    print(f'Validation Loss: {loss:.4f}, Accuracy: {acc:.4f}, F1 Score: {f1:.4f}')
+  print(f'Confusion Matrix:\n{confmat}')
+
+  loss, acc, f1, confmat = evaluate(model, test_loader, criterion)
+  print(f'Test Loss: {loss:.4f}, Test Accuracy: {acc:.4f}, Test F1 Score: {f1:.4f}')
 
 
 if __name__ == '__main__':
